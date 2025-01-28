@@ -7,6 +7,10 @@ Parameters:
     Type: AWS::EC2::AvailabilityZone::Name
   AVZone2:
     Type: AWS::EC2::AvailabilityZone::Name
+  
+  RepoName: 
+    Type: String
+    Description: Enter name for repository 
 
 Resources:
   VPC:
@@ -123,6 +127,13 @@ Resources:
             - /*
       ListenerArn: !Ref Listener
       Priority: 1
+  
+  ECRRepository:
+    Type: AWS::ECR::repository
+      Properties:
+        RepositoryName: !Ref RepoName
+        
+
 
 Outputs:
   VPCID:
