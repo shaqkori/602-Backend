@@ -6,11 +6,8 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: demo-Repo
-  ECS_SERVICE: ECS
-  ECS_CLUSTER: test-cluster
-  ECS_TASK_DEFINITION: ./task.json
-  CONTAINER_NAME: Container
+  BACKEND_PATH: demo/backend/dockerfile
+  FRONTEND_PATH: demo/frontend/dockerfile
 
 jobs:
   build-and-deploy:
@@ -32,7 +29,7 @@ jobs:
       - name: Deploy to AWS CloudFormation
         uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
-          name: DeployECS
+          name: DeployInfrastructure
           template: infrastructure.yaml
         continue-on-error: true
 

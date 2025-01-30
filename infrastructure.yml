@@ -28,7 +28,7 @@ Parameters:
 
   Role:
     Type: String
-    Default: ""
+    Default: "arn:aws:iam::147166433174:role/LabRole"
     Description: IAM role
 
 Resources:
@@ -43,14 +43,14 @@ Resources:
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VPCId: !Ref VPC
+      VpcId: !Ref VPC
       AvailabilityZone: !Ref AZ1
       CidrBlock: 10.0.1.0/24
 
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      VPCId: !Ref VPC
+      VpcId: !Ref VPC
       AvailabilityZone: !Ref AZ2
       CidrBlock: 10.0.2.0/24
 
@@ -58,21 +58,21 @@ Resources:
   PrivateSubnet3:
     Type: AWS::EC2::Subnet
     Properties:
-      VPCId: !Ref VPC
+      VpcId: !Ref VPC
       AvailabilityZone: !Ref AZ1
       CidrBlock: 10.0.5.0/24
 
   PrivateSubnet4:
     Type: AWS::EC2::Subnet
     Properties:
-      VPCId: !Ref VPC
+      VpcId: !Ref VPC
       AvailabilityZone: !Ref AZ2
       CidrBlock: 10.0.6.0/24
 
   PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VPCId: !Ref VPC
+      VpcId: !Ref VPC
       AvailabilityZone: !Ref AZ1
       CidrBlock: 10.0.3.0/24
       MapPublicIpOnLaunch: true
@@ -80,7 +80,7 @@ Resources:
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
-      VPCId: !Ref VPC
+      VpcId: !Ref VPC
       AvailabilityZone: !Ref AZ2
       CidrBlock: 10.0.4.0/24
       MapPublicIpOnLaunch: true
@@ -263,6 +263,14 @@ Resources:
       VpcId: !Ref VPC
       RouteTableIds: [!Ref BackendRouteTable]
 
+  ECSEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecs"
+      VpcId: !Ref VPC
+      VpcEndpointType: Interface
+      SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+
   # ECR
 
   ECRRepository:
@@ -295,13 +303,6 @@ Resources:
     Properties:
       ClusterName: MainCluster
 
-  # Service Discovery
-  PrivateNamespace:
-    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
-    Properties:
-      Name: internal
-      Vpc: !Ref VPC
-
   # Frontend Service
   FrontendTaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -323,10 +324,10 @@ Resources:
 
   FrontendService:
     Type: AWS::ECS::Service
-    DependsOn: ALBListener
+    DependsOn: MyListener
     Properties:
       Cluster: !Ref ECSCluster
-      DesiredCount: 2
+      DesiredCount: 0
       LaunchType: FARGATE
       TaskDefinition: !Ref FrontendTaskDefinition
       NetworkConfiguration:
@@ -344,6 +345,7 @@ Resources:
     Properties:
       Family: backend
       NetworkMode: awsvpc
+      ExecutionRoleArn: !Ref Role
       RequiresCompatibilities: [FARGATE]
       Cpu: 512
       Memory: 1024
@@ -360,26 +362,13 @@ Resources:
     Type: AWS::ECS::Service
     Properties:
       Cluster: !Ref ECSCluster
-      DesiredCount: 2
+      DesiredCount: 0
       LaunchType: FARGATE
       TaskDefinition: !Ref BackendTaskDefinition
       NetworkConfiguration:
         AwsvpcConfiguration:
           Subnets: [!Ref PrivateSubnet3, !Ref PrivateSubnet4]
           AssignPublicIp: DISABLED
-      ServiceRegistries:
-        - RegistryArn: !GetAtt ServiceDiscoveryService.Arn
-
-  ServiceDiscoveryService:
-    Type: AWS::ServiceDiscovery::Service
-    Properties:
-      Name: backend
-      NamespaceId: !Ref PrivateNamespace
-      DnsConfig:
-        RoutingPolicy: MULTIVALUE
-        DnsRecords:
-          - Type: A
-            TTL: 60
 
   # api gateway invokes lambda to connect to dynamodb functionality
 
@@ -395,36 +384,13 @@ Resources:
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
 
-  LambdaExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: DynamoDBAccess
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - dynamodb:Scan # Needed to read all items
-                  - dynamodb:PutItem
-                Resource: !GetAtt DynamoDBTable.Arn
-
   DataProcessorLambda:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: DataProcessor
       Runtime: python3.9
       Handler: index.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
+      Role: !Ref Role
       Code:
         ZipFile: |
           import json
@@ -496,6 +462,7 @@ Resources:
       ApiId: !Ref DataAPI
       IntegrationType: AWS_PROXY
       IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DataProcessorLambda.Arn}/invocations"
+      PayloadFormatVersion: 1.0
 
   # GET Route to fetch data
   DataAPIGetRoute:
