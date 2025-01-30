@@ -1,0 +1,10 @@
+# Use a lightweight NGINX image
+FROM nginx:alpine
+
+# Copy the frontend files to the NGINX HTML directory
+COPY index.html /usr/share/nginx/html/index.html
+
+# Expose port 80 for HTTP traffic
+EXPOSE 80
+
+# NGINX starts automatically, so no need for a CMD
