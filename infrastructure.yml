@@ -269,7 +269,7 @@ Resources:
       ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecs"
       VpcId: !Ref VPC
       VpcEndpointType: Interface
-      SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+      SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet4]
 
   # ECR
 
