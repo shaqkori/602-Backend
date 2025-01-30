@@ -1,16 +1,35 @@
+# template logic:
+# vpc - 2 AV zones - 4 subnets - 2 for frontend containers - 2 for backend containers - load balncer and auto scaling group on both
+# ECR deifined and images pushed to them through github actions
+# ECS Communicates with each other throgh VPC endpoints
+# Backend ECS communicates to api gateway to invoke lambda function to connect to dynamo db
+# frontend ECS is accessed from the load balancer DNS the connected to backednt trough api calls
+
+# NAT gateway -> Internet Gateway  -> Internet
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Secure full-stack application with private subnets, NAT, API Gateway, and Lambda
+
 Parameters:
+  AZ1:
+    Type: AWS::EC2::AvailabilityZone::Name
+
+  AZ2:
+    Type: AWS::EC2::AvailabilityZone::Name
+
   Cidr:
     Type: String
     Default: "10.0.0.0/16"
-    Description: CIDR block for the VPC
-  AVZone1:
-    Type: AWS::EC2::AvailabilityZone::Name
-  AVZone2:
-    Type: AWS::EC2::AvailabilityZone::Name
-  
-  RepoName: 
+    Description: Enter the CIDR block for the vpc
+
+  RepoName:
     Type: String
-    Description: Enter name for repository 
+    Description: Enter repository name
+
+  Role:
+    Type: String
+    Default: ""
+    Description: IAM role
 
 Resources:
   VPC:
@@ -20,64 +39,161 @@ Resources:
       EnableDnsSupport: true
       EnableDnsHostnames: true
 
+  # frontend subnets
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VPCId: !Ref VPC
+      AvailabilityZone: !Ref AZ1
+      CidrBlock: 10.0.1.0/24
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VPCId: !Ref VPC
+      AvailabilityZone: !Ref AZ2
+      CidrBlock: 10.0.2.0/24
+
+  # bakcend subnets
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VPCId: !Ref VPC
+      AvailabilityZone: !Ref AZ1
+      CidrBlock: 10.0.5.0/24
+
+  PrivateSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VPCId: !Ref VPC
+      AvailabilityZone: !Ref AZ2
+      CidrBlock: 10.0.6.0/24
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VPCId: !Ref VPC
+      AvailabilityZone: !Ref AZ1
+      CidrBlock: 10.0.3.0/24
+      MapPublicIpOnLaunch: true
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VPCId: !Ref VPC
+      AvailabilityZone: !Ref AZ2
+      CidrBlock: 10.0.4.0/24
+      MapPublicIpOnLaunch: true
+
+  #Internet/NAT gateway routes
+
   InternetGateway:
     Type: AWS::EC2::InternetGateway
-    Properties:
 
-  Attachment:
+  AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
 
-  RouteTable:
+  NatGateWayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGateway
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateWayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  #Route Tabless -> Creates routes then attatch them to the route tables
+
+  RouteInternetGateway:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  RouteNatGateway:
+    Type: AWS::EC2::Route
+    DependsOn: NatGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
 
-  RouteInternetGateway:
-    Type: AWS::EC2::Route
-    DependsOn: Attachment
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
     Properties:
-      RouteTableId: !Ref RouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGateway
-
-  Subnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone: !Ref AVZone1
-      CidrBlock: "10.0.1.0/24"
       VpcId: !Ref VPC
-      MapPublicIpOnLaunch: true
 
-  Subnet2:
-    Type: AWS::EC2::Subnet
+  BackendRouteTable:
+    Type: AWS::EC2::RouteTable
     Properties:
-      AvailabilityZone: !Ref AVZone2
-      CidrBlock: "10.0.3.0/24"
       VpcId: !Ref VPC
-      MapPublicIpOnLaunch: true
 
-  SubnetRouteTableAssociation1:
+  PublicSubnetRouteTableAssociation1:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref Subnet1
-      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
 
-  SubnetRouteTableAssociation2:
+  PublicSubnetRouteTableAssociation2:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref Subnet2
-      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
 
+  PrivateSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # security Groups
+  HTTP:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Frontend Security Group
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  BackendSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Backend Security Group
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          SourceSecurityGroupId: !Ref HTTP
+
+  # load balancer
   Loadbalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Name: MyALB
       Subnets:
-        - !Ref Subnet1
-        - !Ref Subnet2
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
 
       SecurityGroups:
         - !Ref HTTP
@@ -90,13 +206,13 @@ Resources:
         - Key: Name
           Value: MyALB
 
-  TargetGroup:
+  MyTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Name: TargetGroup
+      Name: MyTargetGroup
       Port: 80
       Protocol: HTTP
-      TargetType: instance
+      TargetType: ip
       VpcId: !Ref VPC
       HealthCheckIntervalSeconds: 30
       HealthCheckPath: /
@@ -105,12 +221,12 @@ Resources:
       HealthyThresholdCount: 5
       UnhealthyThresholdCount: 2
 
-  Listener:
+  MyListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref TargetGroup
+          TargetGroupArn: !Ref MyTargetGroup
       LoadBalancerArn: !Ref Loadbalancer
       Port: 80
       Protocol: HTTP
@@ -120,30 +236,291 @@ Resources:
     Properties:
       Actions:
         - Type: forward
-          TargetGroupArn: !Ref TargetGroup
+          TargetGroupArn: !Ref MyTargetGroup
       Conditions:
         - Field: path-pattern
           Values:
             - /*
-      ListenerArn: !Ref Listener
+      ListenerArn: !Ref MyListener
       Priority: 1
-  
-  ECRRepository:
-    Type: AWS::ECR::repository
-      Properties:
-        RepositoryName: !Ref RepoName
-        
 
+  #VPC endpoints
+
+  APIGatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.execute-api"
+      VpcId: !Ref VPC
+      VpcEndpointType: Interface
+      SubnetIds: [!Ref PrivateSubnet3, !Ref PrivateSubnet4]
+      SecurityGroupIds: [!Ref BackendSG]
+      PrivateDnsEnabled: true
+
+  DynamoDBEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.dynamodb"
+      VpcId: !Ref VPC
+      RouteTableIds: [!Ref BackendRouteTable]
+
+  # ECR
+
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref RepoName
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+
+  #containers
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: MainCluster
+
+  # Service Discovery
+  PrivateNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: internal
+      Vpc: !Ref VPC
+
+  # Frontend Service
+  FrontendTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ExecutionRoleArn: !Ref Role
+      Family: frontend
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      Cpu: 256
+      Memory: 512
+      ContainerDefinitions:
+        - Name: frontend
+          Image: !Sub "${ECRRepository.RepositoryUri}:latest"
+          PortMappings:
+            - ContainerPort: 80
+          Environment:
+            - Name: BACKEND_URL
+              Value: "http://backend.internal:3000"
+
+  FrontendService:
+    Type: AWS::ECS::Service
+    DependsOn: ALBListener
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: 2
+      LaunchType: FARGATE
+      TaskDefinition: !Ref FrontendTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - TargetGroupArn: !Ref MyTargetGroup
+          ContainerName: frontend
+          ContainerPort: 80
+
+  # Backend Service
+  BackendTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: backend
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      Cpu: 512
+      Memory: 1024
+      ContainerDefinitions:
+        - Name: backend
+          Image: !Sub "${ECRRepository.RepositoryUri}:latest"
+          PortMappings:
+            - ContainerPort: 3000
+          Environment:
+            - Name: API_ENDPOINT
+              Value: !Sub "https://${DataAPI}.execute-api.${AWS::Region}.amazonaws.com/data"
+
+  BackendService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: 2
+      LaunchType: FARGATE
+      TaskDefinition: !Ref BackendTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnet3, !Ref PrivateSubnet4]
+          AssignPublicIp: DISABLED
+      ServiceRegistries:
+        - RegistryArn: !GetAtt ServiceDiscoveryService.Arn
+
+  ServiceDiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: backend
+      NamespaceId: !Ref PrivateNamespace
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - Type: A
+            TTL: 60
+
+  # api gateway invokes lambda to connect to dynamodb functionality
+
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AppData
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan # Needed to read all items
+                  - dynamodb:PutItem
+                Resource: !GetAtt DynamoDBTable.Arn
+
+  DataProcessorLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: DataProcessor
+      Runtime: python3.9
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+
+          dynamodb = boto3.resource('dynamodb')
+          table_name = os.environ['TABLE_NAME']
+          table = dynamodb.Table(table_name)
+
+          def handler(event, context):
+              # Handle GET request to fetch all items
+              if event['httpMethod'] == 'GET':
+                  try:
+                      response = table.scan()
+                      return {
+                          'statusCode': 200,
+                          'headers': {'Content-Type': 'application/json'},
+                          'body': json.dumps(response.get('Items', []))
+                      }
+                  except Exception as e:
+                      return {
+                          'statusCode': 500,
+                          'body': json.dumps({'error': str(e)})
+                      }
+              
+              # Handle POST request to add new items
+              elif event['httpMethod'] == 'POST':
+                  try:
+                      data = json.loads(event['body'])
+                      table.put_item(Item=data)
+                      return {
+                          'statusCode': 200,
+                          'body': json.dumps({'message': 'Item added successfully'})
+                      }
+                  except Exception as e:
+                      return {
+                          'statusCode': 500,
+                          'body': json.dumps({'error': str(e)})
+                      }
+              
+              return {
+                  'statusCode': 400,
+                  'body': json.dumps({'error': 'Unsupported method'})
+              }
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref DynamoDBTable
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref BackendSG
+        SubnetIds:
+          - !Ref PrivateSubnet3
+          - !Ref PrivateSubnet4
+
+  # API Gateway
+  DataAPI:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: DataAPI
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: ["*"]
+        AllowMethods: ["GET", "POST"]
+
+  LambdaIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref DataAPI
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DataProcessorLambda.Arn}/invocations"
+
+  # GET Route to fetch data
+  DataAPIGetRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DataAPI
+      RouteKey: "GET /data"
+      Target: !Sub "integrations/${LambdaIntegration}"
+
+  # POST Route to add data
+  DataAPIPostRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DataAPI
+      RouteKey: "POST /data"
+      Target: !Sub "integrations/${LambdaIntegration}"
+
+  LambdaAPIGWPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DataProcessorLambda
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DataAPI}/*"
 
 Outputs:
-  VPCID:
-    Description: "VPC ID"
-    Value: !Ref VPC
-    Export:
-      Name: VPCID
-
-  LoadBalancerDNSName:
-    Description: "DNS Name of the Load Balancer"
+  ALB:
     Value: !GetAtt Loadbalancer.DNSName
-    Export:
-      Name: LoadBalancerDNSName
