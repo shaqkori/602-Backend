@@ -24,7 +24,7 @@ jobs:
         run: |
           aws cloudformation deploy \
             --template-file infrastructure.yml \
-            --stack-name 602Infrastructure \
+            --stack-name Infrastructure602 \
             --parameter-overrides \
                 AZ1=${{ secrets.AZ1 }} \
                 AZ2=${{ secrets.AZ2 }} \
