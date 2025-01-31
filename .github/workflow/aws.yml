@@ -1,64 +1,91 @@
-name: Deploy ECS workflow
+name: Deploy Infrastructure and Push Images
 
 on:
   push:
-    branches: [main]
-
-env:
-  AWS_REGION: us-east-1
-  BACKEND_PATH: demo/backend/dockerfile
-  FRONTEND_PATH: demo/frontend/dockerfile
+    branches:
+      - main
 
 jobs:
-  build-and-deploy:
-    name: Build and Deploy to ECS
+  deploy-infrastructure:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v3
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Deploy to AWS CloudFormation
-        uses: aws-actions/aws-cloudformation-github-deploy@v1
+      - name: Deploy CloudFormation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infrastructure.yaml \
+            --stack-name 602Infrastructure \
+            --parameter-overrides \
+                AZ1=${{ secrets.AZ1 }} \
+                AZ2=${{ secrets.AZ2 }} \
+                RepoName=${{ secrets.ECR_REPOSITORY }} \
+                Role=${{ secrets.ECS_TASK_ROLE_ARN }} \
+            --capabilities CAPABILITY_NAMED_IAM
+
+  build-and-push-images:
+    needs: deploy-infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
         with:
-          name: DeployInfrastructure
-          template: infrastructure.yaml
-        continue-on-error: true
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Log in to Amazon ECR
+      - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build and push image to Amazon ECR
-        id: build-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+      - name: Build and push frontend image
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          cd demo/frontend
+          docker build -t frontend .
+          docker tag frontend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:frontend
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:frontend
 
-      - name: Fill in the new image ID in the ECS task definition
-        id: task-definition
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: ${{ env.ECS_TASK_DEFINITION }}
-          container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ steps.build-image.outputs.image }}
+      - name: Build and push backend image
+        run: |
+          cd demo/backend
+          docker build -t backend .
+          docker tag backend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:backend
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:backend
 
-      - name: Deploy updated ECS task definition
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+  update-ecs-service:
+    needs: build-and-push-images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
         with:
-          task-definition: ${{ steps.task-definition.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update ECS services (set desired count to 1)
+        run: |
+          # Update frontend service
+          aws ecs update-service \
+            --cluster MainCluster \
+            --service FrontendService \
+            --desired-count 1 \
+            --force-new-deployment
+
+          # Update backend service
+          aws ecs update-service \
+            --cluster MainCluster \
+            --service BackendService \
+            --desired-count 1 \
+            --force-new-deployment
