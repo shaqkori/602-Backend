@@ -5,10 +5,10 @@ FROM node:20
 WORKDIR /usr/src/app
 
 # Step 3: Copy package.json and package-lock.json for dependency installation
-COPY package*.json ./
+COPY package.json package-lock.json ./
 
 # Step 4: Install app dependencies
-RUN npm install
+RUN npm ci
 
 # Step 5: Copy the rest of the application files to the container
 COPY . .
@@ -20,4 +20,4 @@ EXPOSE 4000
 # You can set the API Gateway URL to an environment variable or leave it empty
 
 # Step 8: Start the Express server
-CMD ["node", "app.js"]
+CMD ["npm", "start"]

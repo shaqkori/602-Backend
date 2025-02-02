@@ -1,11 +1,11 @@
 Parameters:
   Cidr:
     Type: String
-    Default: "10.0.0.0/16"
+    Default: '10.0.0.0/16'
     Description: CidrBlock for VPC
   Cidr2:
     Type: String
-    Default: "172.16.0.0/16"
+    Default: '172.16.0.0/16'
     Description: CidrBlock for VPC
   AVZone1:
     Type: AWS::EC2::AvailabilityZone::Name
@@ -15,14 +15,14 @@ Parameters:
 
   LTMdesc:
     Type: String
-    Description: "Version Description"
+    Description: 'Version Description'
   Instance:
     Type: String
-    Default: "t2.micro"
+    Default: 't2.micro'
     Description: Instance type - look art allowed values
-
   KeyPairName:
     Type: AWS::EC2::KeyPair::KeyName
+
 
   Name:
     Type: String
@@ -31,63 +31,70 @@ Parameters:
   DomainName:
     Type: String
     Description: "domain name"
-
+  
   Profile:
     Type: String
-    Default: "arn:aws:iam::637423383654:instance-profile/LabInstanceProfile"
+    Default: 'arn:aws:iam::637423383654:instance-profile/LabInstanceProfile' 
+
 
   Image:
     Type: String
-    Default: "ami-06148fefa3b16c86c"
-
+    Default: 'ami-06148fefa3b16c86c'
+  
   LTP1:
     Type: String
     Description: "name for first launchtemplate"
 
+
   DBName:
     Type: String
-    Description: "Name for the RDS database"
+    Description: 'Name for the RDS database'
   MasterUsername:
     Type: String
-    Description: "Master username for the RDS instance"
+    Description: 'Master username for the RDS instance'
   MasterUserPassword:
     Type: String
-    Description: "Master user password for the RDS instance"
+    Description: 'Master user password for the RDS instance'
   publicAccess:
     Type: String
     Default: false
-    AllowedValues:
-      - true
+    AllowedValues: 
+      - true 
       - false
-    Description: "Enable Public Access"
+    Description: 'Enable Public Access'
   EnableMultiAZ:
     Type: String
     Default: false
-    AllowedValues:
-      - true
+    AllowedValues: 
+      - true 
       - false
-    Description: "enable multi-AZ deployment"
+    Description: 'enable multi-AZ deployment'
+
+
+
 
 Resources:
+
   VPC:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: !Ref Cidr
       EnableDnsSupport: true
-      EnableDnsHostnames: true
+      EnableDnsHostnames: true 
 
   VPC2:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: !Ref Cidr2
       EnableDnsSupport: true
-      EnableDnsHostnames: true
+      EnableDnsHostnames: true 
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
-
+  
   InternetGateway2:
     Type: AWS::EC2::InternetGateway
+
 
   AttachGateway2:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -95,32 +102,39 @@ Resources:
       VpcId: !Ref VPC2
       InternetGatewayId: !Ref InternetGateway2
 
+
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
 
-  AtoB:
+
+
+
+  AtoB: 
     Type: AWS::EC2::Route
     DependsOn: VPCPeering
-    Properties:
+    Properties: 
       DestinationCidrBlock: 172.16.0.0/16
       RouteTableId: !Ref PrivateRouteTable
       VpcPeeringConnectionId: !Ref VPCPeering
 
-  BtoA:
+  BtoA: 
     Type: AWS::EC2::Route
     DependsOn: VPCPeering
-    Properties:
+    Properties: 
       DestinationCidrBlock: 10.0.0.0/16
       RouteTableId: !Ref PublicRouteTable2
       VpcPeeringConnectionId: !Ref VPCPeering
+
+
 
   PublicRouteTable2:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC2
+
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -142,12 +156,13 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
-
+  
   loadbalancerRouteTable:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref loadbalancerSubnet
+
 
   loadbalancerRouteTable2:
     Type: AWS::EC2::SubnetRouteTableAssociation
@@ -155,19 +170,23 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref loadbalancerSubnet2
 
+
   NatGateWayEIP:
-    Type: AWS::EC2::EIP
+   Type: AWS::EC2::EIP
 
   PrivateRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
+   Type: AWS::EC2::RouteTable
+   Properties:
       VpcId: !Ref VPC
+
 
   NatGateway:
     Type: AWS::EC2::NatGateway
-    Properties:
+    Properties: 
       AllocationId: !GetAtt NatGateWayEIP.AllocationId
       SubnetId: !Ref loadbalancerSubnet
+
+
 
   RouteNatGateway:
     Type: AWS::EC2::Route
@@ -177,6 +196,7 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref NatGateway
 
+
   PeeredPublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -185,12 +205,15 @@ Resources:
       AvailabilityZone: !Ref AVZone1
       MapPublicIpOnLaunch: true
 
+
   PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       CidrBlock: "10.0.1.0/24"
       AvailabilityZone: !Ref AVZone1
+      
+      
 
   PublicSubnet2:
     Type: AWS::EC2::Subnet
@@ -206,7 +229,7 @@ Resources:
       CidrBlock: "10.0.8.0/24"
       AvailabilityZone: !Ref AVZone1
       MapPublicIpOnLaunch: true
-
+  
   loadbalancerSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -215,21 +238,26 @@ Resources:
       AvailabilityZone: !Ref AVZone2
       MapPublicIpOnLaunch: true
 
+
+
+      
+
   peeredSubnetRouteTable:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
+    Properties: 
       RouteTableId: !Ref PublicRouteTable2
       SubnetId: !Ref PeeredPublicSubnet1
+      
 
   SubnetRouteTable:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
+    Properties: 
       RouteTableId: !Ref PrivateRouteTable
       SubnetId: !Ref PublicSubnet1
 
   SubnetRouteTable2:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
+    Properties: 
       RouteTableId: !Ref PrivateRouteTable
       SubnetId: !Ref PublicSubnet2
 
@@ -238,15 +266,17 @@ Resources:
     Properties:
       VpcId: !Ref "VPC"
       GroupDescription: "Allow HTTP traffic"
-      SecurityGroupIngress:
+      SecurityGroupIngress: 
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
-
+          
+  
+  
   NFS:
     Type: AWS::EC2::SecurityGroup
-    Properties:
+    Properties: 
       VpcId: !Ref "VPC"
       GroupDescription: "Allow NFS connection"
       SecurityGroupIngress:
@@ -288,6 +318,8 @@ Resources:
           ToPort: 3389
           CidrIp: 0.0.0.0/0
 
+
+
   peeredSSH:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -299,9 +331,10 @@ Resources:
           ToPort: 22
           CidrIp: 0.0.0.0/0
 
+
   LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
-    Properties:
+    Properties: 
       LaunchTemplateName: !Ref LTP1
       VersionDescription: !Ref LTMdesc
       LaunchTemplateData:
@@ -315,7 +348,7 @@ Resources:
           - !GetAtt SSH.GroupId
           - !GetAtt NFS.GroupId
           - !GetAtt RDSSSG.GroupId
-
+          
         UserData:
           Fn::Base64: !Sub |
             #!/bin/bash
@@ -335,7 +368,19 @@ Resources:
             sudo apt-get install awscli -y
             sudo apt install nfs-common -y
             sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport $(aws ssm get-parameter --name "/deploy/fsid" --region us-east-1 --query "Parameter.Value" --output text):/ /var/www/html
-            aws s3 cp s3://$(aws ssm get-parameter --name "S3" --query "Parameter.Value" --output text)/mount.sh
+            aws s3 cp s3://$(aws ssm get-parameter --name "S3" --query "Parameter.Value" --output text)/mount.sh 
+
+            
+
+
+
+           
+            
+
+
+
+
+
 
   AutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -344,33 +389,39 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref LaunchTemplate
         Version: !GetAtt LaunchTemplate.LatestVersionNumber
-      MinSize: 0
-      MaxSize: 0
-      DesiredCapacity: 0
+      MinSize: 2
+      MaxSize: 3
+      DesiredCapacity: 2
       VPCZoneIdentifier:
         - !Ref PublicSubnet1
         - !Ref PublicSubnet2
       TargetGroupARNs:
         - !Ref MyTargetGroup
 
+
+
+
   Loadbalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       Name: MyALB
-      Subnets:
+      Subnets: 
         - !Ref loadbalancerSubnet
         - !Ref loadbalancerSubnet2
-
-      SecurityGroups:
+      
+      SecurityGroups: 
         - !Ref HTTP
       Scheme: internet-facing
 
       LoadBalancerAttributes:
         - Key: idle_timeout.timeout_seconds
-          Value: "60"
+          Value: '60'
       Tags:
         - Key: Name
           Value: MyALB
+
+      
+
 
   MyTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -386,6 +437,7 @@ Resources:
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 5
       UnhealthyThresholdCount: 2
+
 
   MyListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -410,10 +462,16 @@ Resources:
       ListenerArn: !Ref MyListener
       Priority: 1
 
+
+
+  
+
   S3:
-    Type: AWS::S3::Bucket
+    Type: AWS::S3::Bucket 
     Properties:
       BucketName: !Ref Name
+
+
 
   MyEFSFileSystem:
     Type: AWS::EFS::FileSystem
@@ -428,15 +486,15 @@ Resources:
       FileSystemId: !Ref MyEFSFileSystem
       SubnetId: !Ref PublicSubnet1
 
-      SecurityGroups:
+      SecurityGroups: 
         - !GetAtt NFS.GroupId
-
+  
   MyEFSMountTarget2:
     Type: AWS::EFS::MountTarget
     Properties:
       FileSystemId: !Ref MyEFSFileSystem
       SubnetId: !Ref PublicSubnet2
-      SecurityGroups:
+      SecurityGroups: 
         - !GetAtt NFS.GroupId
 
   S3Param:
@@ -444,18 +502,20 @@ Resources:
     Properties:
       Name: "/S3"
       Type: String
-      Value: !Sub s3://${Name}
+      Value: !Sub s3://${Name} 
 
+  
   MyParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: "/deploy/fsid"
       Type: String
-      Value:
+      Value: 
         Fn::Sub:
           - "${FileSystemId}.efs.${Region}.amazonaws.com"
           - FileSystemId: !Ref MyEFSFileSystem
             Region: !Ref AWS::Region
+
 
   AMI:
     Type: AWS::SSM::Parameter
@@ -463,6 +523,9 @@ Resources:
       Name: "/deploy/ami"
       Type: String
       Value: !Ref Image
+        
+      
+
 
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
@@ -472,22 +535,24 @@ Resources:
           - DomainName: !GetAtt S3.DomainName
             Id: S3Origin
             S3OriginConfig:
-              OriginAccessIdentity: ""
-        Enabled: "true"
+              OriginAccessIdentity: ''
+        Enabled: 'true'
         DefaultCacheBehavior:
           TargetOriginId: S3Origin
           ForwardedValues:
-            QueryString: "false"
+            QueryString: 'false'
             Cookies:
               Forward: none
           ViewerProtocolPolicy: redirect-to-https
         DefaultRootObject: index.html
 
+
   VPCPeering:
     Type: AWS::EC2::VPCPeeringConnection
-    Properties:
+    Properties: 
       VpcId: !Ref VPC
       PeerVpcId: !Ref VPC2
+  
 
   PeeredEc2:
     Type: AWS::EC2::Instance
@@ -495,11 +560,11 @@ Resources:
       ImageId: ami-057827f01a0d6db1f
       InstanceType: t2.micro
       KeyName: !Ref KeyPairName
-      IamInstanceProfile: "LabInstanceProfile"
+      IamInstanceProfile: 'LabInstanceProfile'
       SecurityGroupIds:
         - !Ref peeredSSH
-        - !Ref RDP
-      SubnetId: !Ref PeeredPublicSubnet1
+        - !Ref RDP 
+      SubnetId: !Ref PeeredPublicSubnet1 	
 
   RDSSubnetGroup:
     Type: "AWS::RDS::DBSubnetGroup"
@@ -509,6 +574,7 @@ Resources:
       SubnetIds:
         - !Ref PublicSubnet1
         - !Ref PublicSubnet2
+
 
   RDS:
     Type: AWS::RDS::DBInstance
@@ -520,19 +586,22 @@ Resources:
       DBInstanceClass: db.t3.micro
       DBSubnetGroupName: !Ref RDSSubnetGroup
       Engine: mysql
-      EngineVersion: "5.7"
+      EngineVersion: '5.7'
       PubliclyAccessible: !Ref publicAccess
       MultiAZ: !Ref EnableMultiAZ
       VPCSecurityGroups:
         - !GetAtt RDSSSG.GroupId
+      
 
   ReadReplicaDBInstance:
     Type: AWS::RDS::DBInstance
     Properties:
+      
       SourceDBInstanceIdentifier: !Ref RDS
-      DBInstanceIdentifier: !Sub "${AWS::StackName}-ReadReplica"
+      DBInstanceIdentifier: !Sub '${AWS::StackName}-ReadReplica'
       DBInstanceClass: db.t2.micro
 
+  
   Endpoint:
     Type: AWS::SSM::Parameter
     Properties:
@@ -541,6 +610,9 @@ Resources:
       Value: !GetAtt RDS.Endpoint.Address
       Description: "RDS endpoint"
 
+  
+
+
   ReadReplicaEndpoint:
     Type: AWS::SSM::Parameter
     Properties:
@@ -548,6 +620,9 @@ Resources:
       Type: String
       Value: !GetAtt ReadReplicaDBInstance.Endpoint.Address
       Description: "RDS read replica endpoint"
+
+
+
 
   DBNameparams:
     Type: AWS::SSM::Parameter
@@ -586,11 +661,13 @@ Outputs:
     Export:
       Name: VPC2Id
 
+
   LoadBalancerDNSName:
     Description: "DNS Name of the Load Balancer"
     Value: !GetAtt Loadbalancer.DNSName
     Export:
       Name: LoadBalancerDNSName
+
 
   S3BucketName:
     Description: "S3 Bucket Name"
@@ -639,3 +716,26 @@ Outputs:
     Value: !Ref MasterUserPassword
     Export:
       Name: MasterUserPassword
+
+
+
+
+
+
+
+
+
+
+
+          
+
+  
+
+
+
+
+
+
+
+
+

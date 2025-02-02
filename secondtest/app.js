@@ -57,7 +57,7 @@ async function getApiGatewayUrl() {
   try {
     const data = await ssm
       .getParameter({
-        Name: "/test/apiGatewayUrl", // Replace with your actual SSM parameter name
+        Name: "/Test/ApiGatewayUrl", // Replace with your actual SSM parameter name
         WithDecryption: false, // Set to true if it's a secure parameter
       })
       .promise();
@@ -69,7 +69,13 @@ async function getApiGatewayUrl() {
 }
 
 async function startServer() {
-  const apiGatewayUrl = await getApiGatewayUrl();
+  let apiGatewayUrl;
+  try {
+    apiGatewayUrl = await getApiGatewayUrl();
+  } catch (error) {
+    console.error("Failed to retrieve API Gateway URL:", error);
+    process.exit(1); // Exit the process with an error code
+  }
 
   const app = express();
   const server = new ApolloServer({

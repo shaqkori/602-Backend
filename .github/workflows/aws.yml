@@ -30,6 +30,7 @@ jobs:
                 AZ2=${{ secrets.AZ2 }} \
                 RepoName=${{ secrets.ECR_REPOSITORY }} \
                 Role=${{ secrets.ECS_TASK_ROLE_ARN }} \
+                KeyPairName=${{ secrets.KEY_PAIR }} \
             --capabilities CAPABILITY_NAMED_IAM
 
   build-and-push-images:

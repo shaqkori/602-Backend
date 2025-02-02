@@ -31,7 +31,7 @@ Parameters:
 
   CognitoUserPoolId:
     Type: String
-    Default: us-east-1_AbcD1234
+    Default: "us-east-1_AbcD1234"
     Description: "The ID of the Cognito User Pool (e.g., us-east-1_AbcD1234)"
 
 Resources:
@@ -170,8 +170,8 @@ Resources:
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 3000
-          ToPort: 3000
+          FromPort: 4000
+          ToPort: 4000
           SourceSecurityGroupId: !Ref HTTP
 
   EC2LaunchConfig:
@@ -196,6 +196,7 @@ Resources:
       MaxSize: 2
       DesiredCapacity: 1
       VPCZoneIdentifier: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+      TargetGroupARNs: [!Ref MyTargetGroup]
       Tags:
         - Key: Name
           Value: ECS-Instance
@@ -300,7 +301,7 @@ Resources:
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: fullstack-app
-      NetworkMode: awsvpc
+      NetworkMode: bridge
       ContainerDefinitions:
         - Name: app
           Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}:latest
@@ -319,7 +320,7 @@ Resources:
     Properties:
       Cluster: !Ref ECSCluster
       TaskDefinition: !Ref TaskDefinition
-      DesiredCount: 1
+      DesiredCount: 0
       LaunchType: EC2
       LoadBalancers:
         - ContainerName: app
@@ -339,13 +340,13 @@ Resources:
       BillingMode: PAY_PER_REQUEST
 
   # Cognito Authorizer
-  MyCognitoAuthorizer:
+  CognitoAuthorizer:
     Type: AWS::ApiGateway::Authorizer
     Properties:
       Name: "CognitoAuthorizer"
       Type: "COGNITO_USER_POOLS"
       IdentitySource: "method.request.header.Authorization"
-      RestApiId: !Ref MyApiGateway
+      RestApiId: !Ref DataAPI
       ProviderARNs:
         - !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${CognitoUserPoolId}"
   # API Gateway
@@ -370,8 +371,10 @@ Resources:
 
   GraphqlMethod:
     Type: AWS::ApiGateway::Method
+    DependsOn: CognitoAuthorizer
     Properties:
       AuthorizationType: "COGNITO_USER_POOLS"
+      AuthorizerId: !Ref CognitoAuthorizer
       HttpMethod: "POST"
       ResourceId: !Ref GraphqlResource
       RestApiId: !Ref DataAPI
@@ -383,10 +386,9 @@ Resources:
   ApiGatewayUrlParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: "/test/apiGatewayUrl"
+      Name: "/Test/ApiGatewayUrl"
       Value: !Sub "https://${DataAPI}.execute-api.${AWS::Region}.amazonaws.com"
       Type: String
-      Overwrite: true
 
 Outputs:
   ALBDNS:
