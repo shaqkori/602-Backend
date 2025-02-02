@@ -54,7 +54,7 @@ jobs:
 
       - name: Build and push backend image
         run: |
-          cd secontest
+          cd secondtest
           docker build -t backend .
           docker tag backend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:backend
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:backend
