@@ -23,7 +23,7 @@ jobs:
       - name: Deploy CloudFormation stack
         run: |
           aws cloudformation deploy \
-            --template-file infrastructure.yml \
+            --template-file cloudinfrastructure.yml \
             --stack-name Infrastructure602 \
             --parameter-overrides \
                 AZ1=${{ secrets.AZ1 }} \
@@ -51,44 +51,9 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build and push frontend image
-        run: |
-          cd demo/frontend
-          docker build -t frontend .
-          docker tag frontend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:frontend
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:frontend
-
       - name: Build and push backend image
         run: |
-          cd demo/backend
+          cd secontest
           docker build -t backend .
           docker tag backend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:backend
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:backend
-
-  update-ecs-service:
-    needs: build-and-push-images
-    runs-on: ubuntu-latest
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v3
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{secrets.AWS_SESSION_TOKEN}}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Update ECS services (set desired count to 1)
-        run: |
-          # Update frontend service
-          aws ecs update-service \
-            --cluster MainCluster \
-            --service FrontendService \
-            --desired-count 1 \
-            --force-new-deployment
-
-          # Update backend service
-          aws ecs update-service \
-            --cluster MainCluster \
-            --service BackendService \
-            --desired-count 1 \
-            --force-new-deployment

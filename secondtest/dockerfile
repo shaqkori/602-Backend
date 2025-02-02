@@ -1,0 +1,23 @@
+# Step 1: Use the official Node.js image as the base image
+FROM node:20
+
+# Step 2: Set the working directory inside the container
+WORKDIR /usr/src/app
+
+# Step 3: Copy package.json and package-lock.json for dependency installation
+COPY package*.json ./
+
+# Step 4: Install app dependencies
+RUN npm install
+
+# Step 5: Copy the rest of the application files to the container
+COPY . .
+
+# Step 6: Expose the port that the app will run on
+EXPOSE 4000
+
+# Step 7: Set the environment variable for API Gateway URL (optional, can be overridden in ECS Task Definition)
+# You can set the API Gateway URL to an environment variable or leave it empty
+
+# Step 8: Start the Express server
+CMD ["node", "app.js"]

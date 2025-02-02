@@ -5,7 +5,18 @@
 # Backend ECS communicates to api gateway to invoke lambda function to connect to dynamo db
 # frontend ECS is accessed from the load balancer DNS the connected to backednt trough api calls
 
+#scratch the ecs endpoint for connection - just connect the subnets to the nat gateway and they can communicate use the vpc endpoints for api gatewat and dynamodb
+# alternative - use instances instead of fargate
+
+# no need for frontend container ccause frontend runs nativly on mobile app so can scratch that and display the output from the backend container
+
 # NAT gateway -> Internet Gateway  -> Internet
+
+# major change - instead implementing graphql api instead of rest (more suited to project requirements for application) appsync doesnt funciton in lab so hosting it on the backend server with express js then accessing webpage from s3 bucket
+# ecs loadbalanced -> nat gateway -> internet
+# loadbalncer url check for authorisation jwt token
+
+#hosted on s3 bucket
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Secure full-stack application with private subnets, NAT, API Gateway, and Lambda
@@ -311,8 +322,8 @@ Resources:
       Family: frontend
       NetworkMode: awsvpc
       RequiresCompatibilities: [FARGATE]
-      Cpu: 256
-      Memory: 512
+      Cpu: 512
+      Memory: 1024
       ContainerDefinitions:
         - Name: frontend
           Image: !Sub "${ECRRepository.RepositoryUri}:frontend"
@@ -347,8 +358,8 @@ Resources:
       NetworkMode: awsvpc
       ExecutionRoleArn: !Ref Role
       RequiresCompatibilities: [FARGATE]
-      Cpu: 512
-      Memory: 1024
+      Cpu: 1024
+      Memory: 2048
       ContainerDefinitions:
         - Name: backend
           Image: !Sub "${ECRRepository.RepositoryUri}:backend"

@@ -30,6 +30,10 @@ app.post("/data", async (req, res) => {
   }
 });
 
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
 // Start the server
 const PORT = 3000;
 app.listen(PORT, () => {
