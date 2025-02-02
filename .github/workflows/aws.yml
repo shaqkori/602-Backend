@@ -23,7 +23,7 @@ jobs:
       - name: Deploy CloudFormation stack
         run: |
           aws cloudformation deploy \
-            --template-file cloudinfrastructure.yml \
+            --template-file cloudInfrastructure.yml \
             --stack-name Infrastructure602 \
             --parameter-overrides \
                 AZ1=${{ secrets.AZ1 }} \
