@@ -31,8 +31,8 @@ jobs:
                 RepoName=${{ secrets.ECR_REPOSITORY }} \
                 Role=${{ secrets.ECS_TASK_ROLE_ARN }} \
                 KeyPairName=${{ secrets.KEY_PAIR }} \
-                DBUsername=${{ secrets.DB_USERNAME }} \
-                DBPassword=${{ secrets.DB_PASSWORD }} \
+                MasterUsername=${{ secrets.DB_USERNAME }} \
+                MasterUserPassword=${{ secrets.DB_PASSWORD }} \
                 DBName=${{ secrets.DB_NAME }} \
             --capabilities CAPABILITY_NAMED_IAM
 
