@@ -20,22 +20,21 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-          - name: Deploy CloudFormation stack
-            run: |
-              aws cloudformation deploy \
-                --template-file backend.yml \
-                --stack-name Infrastructure602 \
-                --parameter-overrides \
-                    AZ1=${{ secrets.AZ1 }} \
-                    AZ2=${{ secrets.AZ2 }} \
-                    RepoName=${{ secrets.ECR_REPOSITORY }} \
-                    Role=${{ secrets.ECS_TASK_ROLE_ARN }} \
-                    KeyPairName=${{ secrets.KEY_PAIR }} \
-                    DBUsername=${{ secrets.DB_USERNAME }} \
-                    DBPassword=${{ secrets.DB_PASSWORD }} \
-                    DBName=${{ secrets.DB_NAME }} \
-                --capabilities CAPABILITY_NAMED_IAM
-
+      - name: Deploy CloudFormation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file backend.yml \
+            --stack-name Infrastructure602 \
+            --parameter-overrides \
+                AZ1=${{ secrets.AZ1 }} \
+                AZ2=${{ secrets.AZ2 }} \
+                RepoName=${{ secrets.ECR_REPOSITORY }} \
+                Role=${{ secrets.ECS_TASK_ROLE_ARN }} \
+                KeyPairName=${{ secrets.KEY_PAIR }} \
+                DBUsername=${{ secrets.DB_USERNAME }} \
+                DBPassword=${{ secrets.DB_PASSWORD }} \
+                DBName=${{ secrets.DB_NAME }} \
+            --capabilities CAPABILITY_NAMED_IAM
 
   build-and-push-images:
     needs: deploy-infrastructure
@@ -49,7 +48,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{secrets.AWS_SESSION_TOKEN}}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
