@@ -255,7 +255,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: MyTargetGroup
-      Port: 80
+      Port: 5173
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VPC
@@ -273,7 +273,7 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref MyTargetGroup
       LoadBalancerArn: !Ref Loadbalancer
-      Port: 80
+      Port: 5173
       Protocol: HTTP
 
   MyListenerRule:
@@ -347,17 +347,7 @@ Resources:
         - Name: frontend
           Image: !Sub "${ECRRepository.RepositoryUri}:frontend"
           PortMappings:
-            - ContainerPort: 80
-          Environment:
-            - Name: DB_NAME
-              Value: !Ref DBName
-            - Name: DB_USER
-              value: !Ref MasterUsername
-            - value: DB_PASSWORD
-              value: !Ref MasterUserPassword
-            - value: DB_HOST
-              value: !GetAtt RDS.Endpoint.Address
-          
+            - ContainerPort: 5173
 
   FrontendService:
     Type: AWS::ECS::Service
@@ -558,15 +548,14 @@ Resources:
       Type: String
       Value: !Ref MasterUserPassword
       Description: "RDS read replica endpoint"
-  
+
   ApiGatewayUrl:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: "/myapp/apiurl"
+      Name: "/myapp/apiGatewayUrl"
       Type: String
       Value: !GetAtt DataAPI.ApiEndpoint
       Description: "API Gateway URL"
-
 
   LambdaAPIGWPermission:
     Type: AWS::Lambda::Permission
