@@ -18,6 +18,8 @@
 
 #hosted on s3 bucket
 
+# create database schema as enviroment variables in github actions then access them
+
 # solved issue of not being able to connect through the load balancer as the instances was not listening on any port, solved by installing a websrver on the instance to listen on port 80 but should manaualy spcify to listen on a port in docker image
 
 # image for froted and backend in one task defiition
@@ -26,11 +28,9 @@
 
 # User → Application Load Balancer → ECS Service (Docker Container)
 #         ↓
-# API Gateway → Lambda → rds (aurora)
+# API Gateway → Lambda → Aurora (mysql)
 #       ↑
 #  Cognito Auth
-
-# export mysql file then make data base connection and pass in the sql file to create the database
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Secure full-stack application with private subnets, NAT, API Gateway, and Lambda
@@ -55,6 +55,30 @@ Parameters:
     Type: String
     Default: "arn:aws:iam::147166433174:role/LabRole"
     Description: IAM role
+
+  DBName:
+    Type: String
+    Description: "Name for the RDS database"
+  MasterUsername:
+    Type: String
+    Description: "Master username for the RDS instance"
+  MasterUserPassword:
+    Type: String
+    Description: "Master user password for the RDS instance"
+  publicAccess:
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+    Description: "Enable Public Access"
+  EnableMultiAZ:
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+    Description: "enable multi-AZ deployment"
 
 Resources:
   VPC:
@@ -196,6 +220,17 @@ Resources:
           ToPort: 3000
           SourceSecurityGroupId: !Ref HTTP
 
+  RDSSSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref "VPC"
+      GroupDescription: "allow RDS connection"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.0.0/16
+
   # load balancer
   Loadbalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -266,12 +301,6 @@ Resources:
       SecurityGroupIds: [!Ref BackendSG]
       PrivateDnsEnabled: true
 
-  DynamoDBEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.dynamodb"
-      VpcId: !Ref VPC
-      RouteTableIds: [!Ref BackendRouteTable]
   # ECR
 
   ECRRepository:
@@ -320,8 +349,15 @@ Resources:
           PortMappings:
             - ContainerPort: 80
           Environment:
-            - Name: BACKEND_URL
-              Value: "http://backend.internal:3000"
+            - Name: DB_NAME
+              Value: !Ref DBName
+            - Name: DB_USER
+              value: !Ref MasterUsername
+            - value: DB_PASSWORD
+              value: !Ref MasterUserPassword
+            - value: DB_HOST
+              value: !GetAtt RDS.Endpoint.Address
+          
 
   FrontendService:
     Type: AWS::ECS::Service
@@ -343,175 +379,25 @@ Resources:
   # Backend Service
 
   # api gateway invokes lambda to connect to dynamodb functionality
-  DynamoDBTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: DataApp
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: N
-        - AttributeName: data
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-        - AttributeName: data
-          KeyType: RANGE
-      BillingMode: PAY_PER_REQUEST
 
   DataProcessorLambda:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: DataProcessor
-      Runtime: Python 3.13
+      Runtime: python3.13
       Handler: index.handler
       Role: !Ref Role
       Code:
-        ZipFile: |
-          import json
-          import boto3
-          from botocore.exceptions import ClientError
-          from decimal import Decimal
-          from boto3.dynamodb.conditions import Key
-
-          # Initialize the DynamoDB client
-          dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-          dynamodb_table = dynamodb.Table('appData')
-
-          status_check_path = '/status'
-          id = '/data/id'
-          data = '/data'
-
-          def lambda_handler(event, context):
-              print('Request event: ', event)
-              response = None
-
-              try:
-                  http_method = event.get('httpMethod')
-                  path = event.get('path')
-
-                  if http_method == 'GET' and path == status_check_path:
-                      response = build_response(200, 'Service is operational')
-                  elif http_method == 'GET' and path == employee_path:
-                      employee_id = event['queryStringParameters']['employeeid']
-                      response = get_employee(employee_id)
-                  elif http_method == 'GET' and path == employees_path:
-                      response = get_employees()
-                  elif http_method == 'POST' and path == employee_path:
-                      response = save_employee(json.loads(event['body']))
-                  elif http_method == 'PATCH' and path == employee_path:
-                      body = json.loads(event['body'])
-                      response = modify_employee(body['employeeId'], body['updateKey'], body['updateValue'])
-                  elif http_method == 'DELETE' and path == employee_path:
-                      body = json.loads(event['body'])
-                      response = delete_employee(body['employeeId'])
-                  else:
-                      response = build_response(404, '404 Not Found')
-
-              except Exception as e:
-                  print('Error:', e)
-                  response = build_response(400, 'Error processing request')
-
-              return response
-
-          def get_employee(employee_id):
-              try:
-                  response = dynamodb_table.get_item(Key={'employeeid': employee_id})
-                  return build_response(200, response.get('Item'))
-              except ClientError as e:
-                  print('Error:', e)
-                  return build_response(400, e.response['Error']['Message'])
-
-          def get_employees():
-              try:
-                  scan_params = {
-                      'TableName': dynamodb_table.name
-                  }
-                  return build_response(200, scan_dynamo_records(scan_params, []))
-              except ClientError as e:
-                  print('Error:', e)
-                  return build_response(400, e.response['Error']['Message'])
-
-          def scan_dynamo_records(scan_params, item_array):
-              response = dynamodb_table.scan(**scan_params)
-              item_array.extend(response.get('Items', []))
-
-              if 'LastEvaluatedKey' in response:
-                  scan_params['ExclusiveStartKey'] = response['LastEvaluatedKey']
-                  return scan_dynamo_records(scan_params, item_array)
-              else:
-                  return {'employees': item_array}
-
-          def save_employee(request_body):
-              try:
-                  dynamodb_table.put_item(Item=request_body)
-                  body = {
-                      'Operation': 'SAVE',
-                      'Message': 'SUCCESS',
-                      'Item': request_body
-                  }
-                  return build_response(200, body)
-              except ClientError as e:
-                  print('Error:', e)
-                  return build_response(400, e.response['Error']['Message'])
-
-          def modify_employee(employee_id, update_key, update_value):
-              try:
-                  response = dynamodb_table.update_item(
-                      Key={'employeeid': employee_id},
-                      UpdateExpression=f'SET {update_key} = :value',
-                      ExpressionAttributeValues={':value': update_value},
-                      ReturnValues='UPDATED_NEW'
-                  )
-                  body = {
-                      'Operation': 'UPDATE',
-                      'Message': 'SUCCESS',
-                      'UpdatedAttributes': response
-                  }
-                  return build_response(200, body)
-              except ClientError as e:
-                  print('Error:', e)
-                  return build_response(400, e.response['Error']['Message'])
-
-          def delete_employee(employee_id):
-              try:
-                  response = dynamodb_table.delete_item(
-                      Key={'employeeid': employee_id},
-                      ReturnValues='ALL_OLD'
-                  )
-                  body = {
-                      'Operation': 'DELETE',
-                      'Message': 'SUCCESS',
-                      'Item': response
-                  }
-                  return build_response(200, body)
-              except ClientError as e:
-                  print('Error:', e)
-                  return build_response(400, e.response['Error']['Message'])
-
-          class DecimalEncoder(json.JSONEncoder):
-              def default(self, obj):
-                  if isinstance(obj, Decimal):
-                      # Check if it's an int or a float
-                      if obj % 1 == 0:
-                          return int(obj)
-                      else:
-                          return float(obj)
-                  # Let the base class default method raise the TypeError
-                  return super(DecimalEncoder, self).default(obj)
-
-          def build_response(status_code, body):
-              return {
-                  'statusCode': status_code,
-                  'headers': {
-                      'Content-Type': 'application/json'
-                  },
-                  'body': json.dumps(body, cls=DecimalEncoder)
-              }
+        S3Bucket: pymysqlshaqkori
+        S3Key: package.zip
 
       Environment:
         Variables:
-          TABLE_NAME: !Ref DynamoDBTable
+          DB_NAME: !Ref DBName
+          DB_USER: !Ref MasterUsername
+          DB_PASSWORD: !Ref MasterUserPassword
+          DB_HOST: !GetAtt RDS.Endpoint.Address
+
       VpcConfig:
         SecurityGroupIds:
           - !Ref BackendSG
@@ -574,6 +460,7 @@ Resources:
   StageName:
     Type: "AWS::ApiGatewayV2::Stage"
     Properties:
+      StageName: Prod
       Description: Prod Stage
       DeploymentId: !Ref Deployment
       ApiId: !Ref DataAPI
@@ -605,6 +492,81 @@ Resources:
       AuthorizationType: JWT
       AuthorizerId: !Ref CogAuthorizer
       Target: !Sub "integrations/${LambdaIntegration}"
+
+  # RDS aurora mysql
+
+  RDS:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: !Ref DBName
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterUserPassword
+      AllocatedStorage: 20
+      DBInstanceClass: db.t3.micro
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      Engine: mysql
+      EngineVersion: "8.0.34"
+      PubliclyAccessible: !Ref publicAccess
+      MultiAZ: !Ref EnableMultiAZ
+      VPCSecurityGroups:
+        - !GetAtt RDSSSG.GroupId
+
+  ReadReplicaDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      SourceDBInstanceIdentifier: !Ref RDS
+      DBInstanceIdentifier: !Sub "${AWS::StackName}-ReadReplica"
+      DBInstanceClass: db.t3.micro
+
+  RDSSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupName: "RDSSg"
+      DBSubnetGroupDescription: "DB Subnet Group"
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  ReadReplicaEndpoint:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "/dbtask/dbEndpointReadReplica"
+      Type: String
+      Value: !GetAtt RDS.Endpoint.Address
+      Description: "RDSendpoint"
+
+  DBNameparams:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "/dbtask/dbName"
+      Type: String
+      Value: !Ref DBName
+      Description: "DBNAME"
+
+  DBUser:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "/dbtask/dbUser"
+      Type: String
+      Value: !Ref MasterUsername
+      Description: "RDS read replica endpoint"
+
+  DBPassword:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "/dbtask/dbpassword"
+      Type: String
+      Value: !Ref MasterUserPassword
+      Description: "RDS read replica endpoint"
+  
+  ApiGatewayUrl:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "/myapp/apiurl"
+      Type: String
+      Value: !GetAtt DataAPI.ApiEndpoint
+      Description: "API Gateway URL"
+
 
   LambdaAPIGWPermission:
     Type: AWS::Lambda::Permission

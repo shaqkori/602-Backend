@@ -1,0 +1,7 @@
+CREATE DATABASE appData;
+
+USE appData;
+
+CREATE TABLE schema (
+    id INT PRIMARY KEY AUTO_INCREMENT
+);

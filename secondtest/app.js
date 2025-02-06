@@ -2,7 +2,7 @@ const express = require("express");
 const { ApolloServer, gql } = require("apollo-server-express");
 const AWS = require("aws-sdk");
 
-AWS.config.update({ region: "us-east-1" }); // Set your region here
+AWS.config.update({ region: "us-east-1" });
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
 const ssm = new AWS.SSM();
 
@@ -25,7 +25,7 @@ const resolvers = {
     getItem: async (_, { id }) => {
       try {
         const params = {
-          TableName: "testTable", // Replace with your actual DynamoDB table name
+          TableName: "testTable",
           Key: { id },
         };
         const result = await dynamoDB.get(params).promise();
@@ -40,7 +40,7 @@ const resolvers = {
     createItem: async (_, { id }) => {
       try {
         const params = {
-          TableName: "testTable", // Replace with your actual DynamoDB table name
+          TableName: "testTable",
           Item: { id },
         };
         await dynamoDB.put(params).promise();
@@ -57,8 +57,8 @@ async function getApiGatewayUrl() {
   try {
     const data = await ssm
       .getParameter({
-        Name: "/Test/ApiGatewayUrl", // Replace with your actual SSM parameter name
-        WithDecryption: false, // Set to true if it's a secure parameter
+        Name: "/Test/ApiGatewayUrl",
+        WithDecryption: false,
       })
       .promise();
     return data.Parameter.Value;
