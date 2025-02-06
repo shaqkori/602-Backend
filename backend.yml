@@ -1,37 +1,3 @@
-# template logic:
-# vpc - 2 AV zones - 4 subnets - 2 for frontend containers - 2 for backend containers - load balncer and auto scaling group on both
-# ECR deifined and images pushed to them through github actions
-# ECS Communicates with each other throgh VPC endpoints
-# Backend ECS communicates to api gateway to invoke lambda function to connect to dynamo db
-# frontend ECS is accessed from the load balancer DNS the connected to backednt trough api calls
-
-#scratch the ecs endpoint for connection - just connect the subnets to the nat gateway and they can communicate use the vpc endpoints for api gatewat and dynamodb
-# alternative - use instances instead of fargate
-
-# no need for frontend container ccause frontend runs nativly on mobile app so can scratch that and display the output from the backend container
-
-# NAT gateway -> Internet Gateway  -> Internet
-
-# major change - instead implementing graphql api instead of rest (more suited to project requirements for application) appsync doesnt funciton in lab so hosting it on the backend server with express js then accessing webpage from s3 bucket
-# ecs loadbalanced -> nat gateway -> internet
-# loadbalncer url check for authorisation jwt token
-
-#hosted on s3 bucket
-
-# create database schema as enviroment variables in github actions then access them
-
-# solved issue of not being able to connect through the load balancer as the instances was not listening on any port, solved by installing a websrver on the instance to listen on port 80 but should manaualy spcify to listen on a port in docker image
-
-# image for froted and backend in one task defiition
-
-#node js on a web app connected to a database
-
-# User → Application Load Balancer → ECS Service (Docker Container)
-#         ↓
-# API Gateway → Lambda → Aurora (mysql)
-#       ↑
-#  Cognito Auth
-
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Secure full-stack application with private subnets, NAT, API Gateway, and Lambda
 
@@ -59,12 +25,15 @@ Parameters:
   DBName:
     Type: String
     Description: "Name for the RDS database"
+
   MasterUsername:
     Type: String
     Description: "Master username for the RDS instance"
+
   MasterUserPassword:
     Type: String
     Description: "Master user password for the RDS instance"
+
   publicAccess:
     Type: String
     Default: false
@@ -72,13 +41,14 @@ Parameters:
       - true
       - false
     Description: "Enable Public Access"
+
   EnableMultiAZ:
     Type: String
     Default: false
     AllowedValues:
       - true
       - false
-    Description: "enable multi-AZ deployment"
+    Description: "Enable multi-AZ deployment"
 
 Resources:
   VPC:
@@ -88,7 +58,6 @@ Resources:
       EnableDnsSupport: true
       EnableDnsHostnames: true
 
-  # frontend subnets
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -119,8 +88,6 @@ Resources:
       CidrBlock: 10.0.4.0/24
       MapPublicIpOnLaunch: true
 
-  #Internet/NAT gateway routes
-
   InternetGateway:
     Type: AWS::EC2::InternetGateway
 
@@ -139,8 +106,6 @@ Resources:
     Properties:
       AllocationId: !GetAtt NatGateWayEIP.AllocationId
       SubnetId: !Ref PublicSubnet1
-
-  #Route Tabless -> Creates routes then attatch them to the route tables
 
   RouteInternetGateway:
     Type: AWS::EC2::Route
@@ -197,7 +162,6 @@ Resources:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable
 
-  # security Groups
   HTTP:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -223,7 +187,7 @@ Resources:
   RDSSSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      VpcId: !Ref "VPC"
+      VpcId: !Ref VPC
       GroupDescription: "allow RDS connection"
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -231,7 +195,6 @@ Resources:
           ToPort: 3306
           CidrIp: 10.0.0.0/16
 
-  # load balancer
   Loadbalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -239,11 +202,9 @@ Resources:
       Subnets:
         - !Ref PublicSubnet1
         - !Ref PublicSubnet2
-
       SecurityGroups:
         - !Ref HTTP
       Scheme: internet-facing
-
       LoadBalancerAttributes:
         - Key: idle_timeout.timeout_seconds
           Value: "60"
@@ -289,8 +250,6 @@ Resources:
       ListenerArn: !Ref MyListener
       Priority: 1
 
-  #VPC endpoints
-
   APIGatewayEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -300,8 +259,6 @@ Resources:
       SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
       SecurityGroupIds: [!Ref BackendSG]
       PrivateDnsEnabled: true
-
-  # ECR
 
   ECRRepository:
     Type: AWS::ECR::Repository
@@ -326,14 +283,11 @@ Resources:
             ]
           }
 
-  #containers
-
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: MainCluster
 
-  # Frontend Service
   FrontendTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -349,26 +303,22 @@ Resources:
           PortMappings:
             - ContainerPort: 5173
 
-  FrontendService:
-    Type: AWS::ECS::Service
-    DependsOn: MyListener
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
     Properties:
-      Cluster: !Ref ECSCluster
-      DesiredCount: 0
-      LaunchType: FARGATE
-      TaskDefinition: !Ref FrontendTaskDefinition
-      NetworkConfiguration:
-        AwsvpcConfiguration:
-          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
-          AssignPublicIp: DISABLED
-      LoadBalancers:
-        - TargetGroupArn: !Ref MyTargetGroup
-          ContainerName: frontend
-          ContainerPort: 80
-
-  # Backend Service
-
-  # api gateway invokes lambda to connect to dynamodb functionality
+      Family: fullstack-app
+      NetworkMode: bridge
+      ContainerDefinitions:
+        - Name: app
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}:latest"
+          Cpu: 512
+          Memory: 1024
+          PortMappings:
+            - ContainerPort: 5173
+              HostPort: 5173
+          Environment:
+            - Name: API_ENDPOINT
+              Value: !Sub "https://${DataAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod/data"
 
   DataProcessorLambda:
     Type: AWS::Lambda::Function
@@ -380,14 +330,12 @@ Resources:
       Code:
         S3Bucket: pymysqlshaqkori
         S3Key: package.zip
-
       Environment:
         Variables:
           DB_NAME: !Ref DBName
           DB_USER: !Ref MasterUsername
           DB_PASSWORD: !Ref MasterUserPassword
           DB_HOST: !GetAtt RDS.Endpoint.Address
-
       VpcConfig:
         SecurityGroupIds:
           - !Ref BackendSG
@@ -428,7 +376,6 @@ Resources:
         Audience: [!Ref UserPool]
         Issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
 
-  # API Gateway
   DataAPI:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -439,7 +386,7 @@ Resources:
         AllowMethods: ["GET", "POST"]
 
   Deployment:
-    Type: "AWS::ApiGatewayV2::Deployment"
+    Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
       - DataAPIGetRoute
       - DataAPIPostRoute
@@ -448,7 +395,7 @@ Resources:
       ApiId: !Ref DataAPI
 
   StageName:
-    Type: "AWS::ApiGatewayV2::Stage"
+    Type: AWS::ApiGatewayV2::Stage
     Properties:
       StageName: Prod
       Description: Prod Stage
@@ -463,7 +410,6 @@ Resources:
       IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DataProcessorLambda.Arn}/invocations"
       PayloadFormatVersion: 1.0
 
-  # GET Route to fetch data
   DataAPIGetRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
@@ -473,7 +419,6 @@ Resources:
       AuthorizerId: !Ref CogAuthorizer
       Target: !Sub "integrations/${LambdaIntegration}"
 
-  # POST Route to add data
   DataAPIPostRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
@@ -482,8 +427,6 @@ Resources:
       AuthorizationType: JWT
       AuthorizerId: !Ref CogAuthorizer
       Target: !Sub "integrations/${LambdaIntegration}"
-
-  # RDS aurora mysql
 
   RDS:
     Type: AWS::RDS::DBInstance
@@ -509,7 +452,7 @@ Resources:
       DBInstanceClass: db.t3.micro
 
   RDSSubnetGroup:
-    Type: "AWS::RDS::DBSubnetGroup"
+    Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupName: "RDSSg"
       DBSubnetGroupDescription: "DB Subnet Group"
