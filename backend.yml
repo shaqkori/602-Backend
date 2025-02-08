@@ -173,15 +173,15 @@ Resources:
           ToPort: 80
           CidrIp: 0.0.0.0/0
 
-  BackendSG:
+  ECSTaskSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Backend Security Group
+      GroupDescription: Allow traffic from ALB to ECS tasks
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 3000
-          ToPort: 3000
+          FromPort: 5173 # Port your container listens on (e.g., frontend:5173)
+          ToPort: 5173
           SourceSecurityGroupId: !Ref HTTP
 
   RDSSSG:
@@ -216,7 +216,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: MyTargetGroup
-      Port: 5173
+      Port: 80
       Protocol: HTTP
       TargetType: ip
       VpcId: !Ref VPC
@@ -257,7 +257,7 @@ Resources:
       VpcId: !Ref VPC
       VpcEndpointType: Interface
       SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
-      SecurityGroupIds: [!Ref BackendSG]
+      SecurityGroupIds: [!Ref ECSTaskSG]
       PrivateDnsEnabled: true
 
   ECRRepository:
@@ -288,6 +288,25 @@ Resources:
     Properties:
       ClusterName: MainCluster
 
+  FrontendService:
+    Type: AWS::ECS::Service
+    DependsOn: MyListener
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: 0
+      LaunchType: FARGATE
+      TaskDefinition: !Ref FrontendTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref ECSTaskSG
+      LoadBalancers:
+        - TargetGroupArn: !Ref MyTargetGroup
+          ContainerName: frontend
+          ContainerPort: 5173
+
   FrontendTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -299,26 +318,10 @@ Resources:
       Memory: 1024
       ContainerDefinitions:
         - Name: frontend
-          Image: !Sub "${ECRRepository.RepositoryUri}:frontend"
-          PortMappings:
-            - ContainerPort: 5173
-
-  TaskDefinition:
-    Type: AWS::ECS::TaskDefinition
-    Properties:
-      Family: fullstack-app
-      NetworkMode: bridge
-      ContainerDefinitions:
-        - Name: app
-          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}:latest"
-          Cpu: 512
-          Memory: 1024
+          Image: !Sub "${ECRRepository.RepositoryUri}:backend"
           PortMappings:
             - ContainerPort: 5173
               HostPort: 5173
-          Environment:
-            - Name: API_ENDPOINT
-              Value: !Sub "https://${DataAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod/data"
 
   DataProcessorLambda:
     Type: AWS::Lambda::Function
@@ -338,7 +341,7 @@ Resources:
           DB_HOST: !GetAtt RDS.Endpoint.Address
       VpcConfig:
         SecurityGroupIds:
-          - !Ref BackendSG
+          - !Ref ECSTaskSG
         SubnetIds:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
