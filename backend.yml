@@ -234,7 +234,7 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref MyTargetGroup
       LoadBalancerArn: !Ref Loadbalancer
-      Port: 5173
+      Port: 80
       Protocol: HTTP
 
   MyListenerRule:
@@ -502,6 +502,15 @@ Resources:
       Type: String
       Value: !GetAtt DataAPI.ApiEndpoint
       Description: "API Gateway URL"
+
+  SSMUserPoolParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /cognito/userpool-id # The parameter name in SSM
+      Type: String
+      Value: !Ref UserPool # This stores the UserPoolId in SSM
+      Description: "Cognito User Pool ID"
+      Tier: Standard
 
   LambdaAPIGWPermission:
     Type: AWS::Lambda::Permission
