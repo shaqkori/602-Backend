@@ -19,7 +19,7 @@ function App() {
   const fetchApiUrl = async () => {
     try {
       const params = {
-        Name: "/my-app/api-url", // The parameter name in SSM
+        Name: "myapp/apiGatewayUrl", // The parameter name in SSM
         WithDecryption: true,
       };
       const response = await SSM.getParameter(params).promise();
@@ -48,7 +48,7 @@ function App() {
   const fetchData = async () => {
     if (!apiUrl) return; // Ensure API URL is available
     try {
-      const response = await fetch(`${apiUrl}/data`, {
+      const response = await fetch(`${apiUrl}/Prod/data`, {
         method: "GET",
         headers: {
           "Authorization": token,
@@ -68,7 +68,7 @@ function App() {
     if (!apiUrl) return;
 
     try {
-      await fetch(`${apiUrl}/data`, {
+      await fetch(`${apiUrl}/Prod/data`, {
         method: "POST",
         headers: {
           "Authorization": token,
@@ -95,7 +95,7 @@ function App() {
 
   return (
     <div className="App">
-      <h1>Proxy Shipping App</h1>
+      <h1>demo app </h1>
 
       {/* Login Section */}
       <div>
