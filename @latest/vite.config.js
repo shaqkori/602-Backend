@@ -5,14 +5,14 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: "0.0.0.0", // Allow external connections
+    host: "0.0.0.0", // Allow external connections (required for ALB)
     hmr: {
-      // Use the ALB's public hostname and protocol
+      // Use the ALB's public hostname and port
       host: "myalb-671503919.us-east-1.elb.amazonaws.com",
-      protocol: "ws", // Use 'wss' if HTTPS/SSL is enabled
+      protocol: "ws", // Use 'wss' if ALB uses HTTPS
       port: 80, // Use 443 for HTTPS
     },
-    // If behind a proxy (like ALB), set the origin explicitly
-    origin: "http://myalb-671503919.us-east-1.elb.amazonaws.com",
+    // Ensure CORS headers allow WebSocket connections
+    cors: true,
   },
 });
