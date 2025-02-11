@@ -5,6 +5,6 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
-    hmr: command === "serve" ? true : false, // Disable HMR in production
+    allowedHosts: true,
   },
 });
