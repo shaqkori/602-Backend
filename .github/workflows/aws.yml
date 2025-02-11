@@ -58,7 +58,7 @@ jobs:
       - name: Build and push backend image
         run: |
           # Navigate to the directory containing the Dockerfile
-          cd thirdtest/backend
+          cd thirdtest/testApp
           docker build -t backend .
           docker tag backend:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:backend
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:backend
