@@ -23,7 +23,7 @@ function App() {
   };
 
   return (
-    <div style={{ textAlign: "center", padding: "20px", margin: "0 auto"}}>
+    <div style={{ }}>
       <h1>Data from API Gateway</h1>
       {loading ? (
         <p>Loading data...</p>

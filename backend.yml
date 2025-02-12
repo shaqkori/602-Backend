@@ -305,7 +305,7 @@ Resources:
       LoadBalancers:
         - TargetGroupArn: !Ref MyTargetGroup
           ContainerName: frontend
-          ContainerPort: 5173
+          ContainerPort: 80
 
   FrontendTaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -320,8 +320,8 @@ Resources:
         - Name: frontend
           Image: !Sub "${ECRRepository.RepositoryUri}:backend"
           PortMappings:
-            - ContainerPort: 5173
-              HostPort: 5173
+            - ContainerPort: 80
+              HostPort: 80
 
   DataProcessorLambda:
     Type: AWS::Lambda::Function
